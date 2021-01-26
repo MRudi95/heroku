@@ -1,0 +1,6 @@
+[debug] Copy resource mappings: 
+[debug] 	(/home/lin/heroku/play-silhouette-seed/conf/silhouette.conf,/home/lin/heroku/play-silhouette-seed/target/scala-2.13/classes/silhouette.conf)
+[debug] 	(/home/lin/heroku/play-silhouette-seed/conf/messages,/home/lin/heroku/play-silhouette-seed/target/scala-2.13/classes/messages)
+[debug] 	(/home/lin/heroku/play-silhouette-seed/conf/application.conf,/home/lin/heroku/play-silhouette-seed/target/scala-2.13/classes/application.conf)
+[debug] 	(/home/lin/heroku/play-silhouette-seed/conf/routes,/home/lin/heroku/play-silhouette-seed/target/scala-2.13/classes/routes)
+[debug] 	(/home/lin/heroku/play-silhouette-seed/conf/application.prod.conf,/home/lin/heroku/play-silhouette-seed/target/scala-2.13/classes/application.prod.conf)

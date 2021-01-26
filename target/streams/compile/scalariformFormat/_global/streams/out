@@ -1,0 +1,2 @@
+[0m[[0m[0minfo[0m] [0m[0mFormatting 42 Scala sources ProjectRef(uri("file:/home/lin/heroku/play-silhouette-seed/"), "root")(compile) ...[0m
+[0m[[0m[33mwarn[0m] [0m[0mScalariform parser error for /home/lin/heroku/play-silhouette-seed/app/controllers/HomeController.scala: Expected token SEMI but got Token(EQUALS,=,2311,=)[0m
