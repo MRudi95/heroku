@@ -43,7 +43,12 @@
                         :</strong></p><p class="col-md-6">@user.email.getOrElse("None")</p>
                 </div>
                 <div class="row">
-                    <button type="button" class="btn btn-primary"><a href="/assets/play/index.html#/" style="color: white">Go to lobby!</a></button>
+                    <button type="button" class="btn btn-primary"><a href="/startGame" style="color: white">Start Game</a></button>
+                    <form method="get" action="/joinGame">
+                        <input type="text" class="form-control" placeholder="Enter Code" name="code">
+                        <input type="submit" value="Join Game">
+                    </form>
+
                 </div>
             </div>
         </div>

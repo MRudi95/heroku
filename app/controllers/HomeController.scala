@@ -1,5 +1,7 @@
 package controllers
 
+import java.util.UUID
+
 import javax.inject._
 import play.api.mvc._
 import de.htwg.se.slay.SlayModule
@@ -11,13 +13,20 @@ import play.api.libs.streams.ActorFlow
 import akka.actor._
 import akka.stream.Materializer
 import com.google.inject.{Guice, Injector}
+import com.mohiva.play.silhouette.api.Silhouette
+import com.mohiva.play.silhouette.api.actions.SecuredRequest
+import utils.auth.DefaultEnv
+
+import scala.util.Random
 
 @Singleton
-class HomeController @Inject()(cc: ControllerComponents) (implicit system: ActorSystem, mat: Materializer) extends AbstractController(cc){
+class HomeController @Inject()(cc: ControllerComponents, silhouette: Silhouette[DefaultEnv]) (implicit system: ActorSystem, mat: Materializer) extends AbstractController(cc) {
   val jsonIO = new FileIO
   val injector: Injector = Guice.createInjector(new SlayModule)
 
   val gameController = newGameInstance() //wird spaeter liste mit allen laufenden spielen
+  var playerMap: Map[UUID, (ControllerInterface, String, Int, Option[MyWebSocketActor])] = Map()
+  var latestPlayer: UUID = _ //cheaten um im websocket die id des spielers zu nutzen
 
   def newGameInstance():ControllerInterface = {
     val controller: ControllerInterface = injector.getInstance(classOf[ControllerInterface])
@@ -28,64 +37,124 @@ class HomeController @Inject()(cc: ControllerComponents) (implicit system: Actor
     controller
   }
 
-  //wird noch wegrationalisiert durch gekapseltes frontend
-  /*
-  def about = Action {
-    Ok(views.html.about())
+
+  def startGame() = silhouette.SecuredAction { implicit request =>
+//    println("OLLA")
+
+    val game = newGameInstance()
+    val gamecode = Random.alphanumeric.take(5).mkString("").toUpperCase
+    val player = 1
+    val playerid = request.identity.userID
+    val playername = request.identity.firstName match{
+      case Some(name) => name
+      case None => "Player 1"
+    }
+    game.changeName(playername, player)
+
+    playerMap = playerMap + ( playerid -> {(game, gamecode, player, None)} )
+    latestPlayer = playerid
+//    println(playerMap)
+
+    Redirect("/assets/play/index.html")
   }
 
-  def slay = Action {
-    Ok(views.html.slay(this, ""))
+  def joinGame(code: String) = silhouette.SecuredAction { implicit request =>
+    //check if code has right format (5 characters or digits)
+    println(code)
+    if(code.length != 5)
+      InternalServerError("code has wrong length")
+    else
+    {
+      val player  = 2
+      val playerid = request.identity.userID
+      val playername = request.identity.firstName match{
+        case Some(name) => name
+        case None => "Player 2"
+      }
+
+      //get the game you want to join
+      val result = playerMap.filter( entry => entry._2._2.equals(code) )
+
+      if(result.isEmpty)
+        InternalServerError("code does not exist") //code is not in the map / does not exist
+      else if(result.size > 1)
+        InternalServerError("too many players") //2 players already connected to the game
+      else
+      {
+        val game = result.head._2._1
+        game.changeName(playername, player)
+
+        latestPlayer = playerid
+        playerMap = playerMap + ( playerid -> {(game, code, player, None)} )
+
+
+        Redirect("/assets/play/index.html")
+      }
+    }
   }
-  // /wird noch wegrationalisiert
-  */
+
+
+  def processCommand(command: String, request: SecuredRequest[DefaultEnv, AnyContent]): Result ={
+    try{
+      //get infos of the player that send the command
+      val (game, code, number, socket) = playerMap(request.identity.userID)
+
+      //check if it is this players turn right now or not
+      if (checkTurn(number, game))
+        processInput(command, game)
+      else
+        socket.get.out ! Json.obj( "message" -> "It is not your turn right now!").toString()
+
+      Ok("")
+    } catch {
+      case _: Throwable => InternalServerError("")
+    }
+  }
 
   //commands
-  def buy(coord: String) = Action {
-    processInput("buy " + coord, gameController)
-    Ok("")
+  def buy(coord: String) = silhouette.SecuredAction { implicit request =>
+      val command = "buy " + coord
+      processCommand(command, request)
   }
 
-  def mov(coord1: String, coord2: String) = Action{
-    processInput("mov " + coord1 + " " + coord2, gameController)
-    Ok("")
+  def mov(coord1: String, coord2: String) = silhouette.SecuredAction{ implicit request =>
+    val command = "mov " + coord1 + " " + coord2
+    processCommand(command, request)
   }
 
-  def cmb(coord1: String, coord2: String) = Action{
-    processInput("cmb " + coord1 + " " + coord2, gameController)
-    Ok("")
+  def cmb(coord1: String, coord2: String) = silhouette.SecuredAction{ implicit request =>
+    val command = "cmb " + coord1 + " " + coord2
+    processCommand(command, request)
   }
 
-  def plc(coord: String) = Action {
-    processInput("plc " + coord, gameController)
-    Ok("")
+  def plc(coord: String) = silhouette.SecuredAction{ implicit request =>
+    val command = "plc " + coord
+    processCommand(command, request)
   }
 
-  def bal(coord: String) = Action {
-    processInput("bal " + coord, gameController)
-    Ok("")
+  def bal(coord: String) = silhouette.SecuredAction{ implicit request =>
+    val command = "bal " + coord
+    processCommand(command, request)
   }
 
-  def undo() = Action {
-    processInput("undo", gameController)
-    Ok("")
-    //brauch noch javascript wie die anderen
+  def undo() = silhouette.SecuredAction{ implicit request =>
+    val command = "undo"
+    processCommand(command, request)
   }
 
-  def redo() = Action {
-    processInput("redo", gameController)
-    Ok("")
-    //brauch noch javascript wie die anderen
+  def redo() = silhouette.SecuredAction{ implicit request =>
+    val command = "redo"
+    processCommand(command, request)
   }
 
-  def end() = Action {
-    processInput("end", gameController)
-    Ok("")
+  def end() = silhouette.SecuredAction{ implicit request =>
+    val command = "end"
+    processCommand(command, request)
   }
 
-  def surrender() = Action {
-    processInput("ff20", gameController)
-    Ok("")
+  def surrender() = silhouette.SecuredAction{ implicit request =>
+    val command = "ff20"
+    processCommand(command, request)
   }
 
   def getJson() = Action{
@@ -122,18 +191,29 @@ class HomeController @Inject()(cc: ControllerComponents) (implicit system: Actor
     }
   }
 
-  class MyWebSocketActor(out: ActorRef) extends Actor with Observer {
-    gameController.add(this)
+  class MyWebSocketActor(val out: ActorRef) extends Actor with Observer {
+//    println("WS:" + playerMap.get(latestPlayer))
+    val info = playerMap(latestPlayer)
+    playerMap = playerMap + ( latestPlayer -> { info.copy(_4 = Option(this)) } ) //websocket des spielers in seine infos einfuegen
+
+    val (game, gamecode, playernumber, socket) = info
+    game.add(this)
+
 
     def receive = {
+      //gets an initial message "SYN" from frontend
       case msg: String =>
         out ! ("I received your message: " + msg)
+        //send the gamecode to player 1
+        println(gamecode)
+        if(playernumber == 1)
+          out ! Json.obj( "code" -> gamecode).toString()
     }
 
     val jsonIO = new FileIO
     override def update(e: Event): Boolean = {
       e match{
-        case _: SuccessEvent => out ! jsonIO.gridToJson(gameController.grid, gameController.players).toString(); true
+        case _: SuccessEvent => out ! jsonIO.gridToJson(game.grid, game.players).toString(); true
         case _: MoneyErrorEvent => out ! Json.obj( "message" -> "Not enough Money!").toString(); true
         case b: BalanceEvent =>
           val msg = "Balance: " + b.bal + " Income: " + b.inc + " ArmyCost: " + b.cost
@@ -199,6 +279,10 @@ class HomeController @Inject()(cc: ControllerComponents) (implicit system: Actor
       val rows = idx.charAt(1).asDigit - 1
       rows * (controller.grid.colIdx+1) + cols
     }
+  }
+
+  def checkTurn(playernumber: Int, controller: ControllerInterface ): Boolean ={
+    controller.state == playernumber
   }
 }
 
