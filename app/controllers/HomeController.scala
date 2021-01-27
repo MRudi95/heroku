@@ -32,6 +32,7 @@ class HomeController @Inject()(cc: ControllerComponents, silhouette: Silhouette[
     val controller: ControllerInterface = injector.getInstance(classOf[ControllerInterface])
 
     controller.createGrid("Map1")
+
     controller.nextturn()
 
     controller
@@ -50,6 +51,7 @@ class HomeController @Inject()(cc: ControllerComponents, silhouette: Silhouette[
       case None => "Player 1"
     }
     game.changeName(playername, player)
+    game.nextturn() //set game to player 2 at first, so player 1 cant do stuff until player 2 is there
 
     playerMap = playerMap + ( playerid -> {(game, gamecode, player, None)} )
     latestPlayer = playerid
@@ -160,17 +162,17 @@ class HomeController @Inject()(cc: ControllerComponents, silhouette: Silhouette[
   def getJson() = Action{
     var json = jsonIO.gridToJson(gameController.grid, gameController.players)
     json = json.+(("player", Json.obj(
-      "playername" -> getPlayerturn(),
-      "playercolor" -> getPlayercolor(),
+      "playername" -> getPlayerturn(gameController),
+      "playercolor" -> getPlayercolor(gameController),
     )))
     Ok(json)
   }
 
-  def getPlayerturn() = {
-    gameController.players(gameController.state).name
+  def getPlayerturn(game: ControllerInterface) = {
+    game.players(game.state).name
   }
-  def getPlayercolor()={
-    gameController.state match {
+  def getPlayercolor(game: ControllerInterface)={
+    game.state match {
       case 1 => "yellow"
       case 2 => "green"
       case _ => ""
@@ -208,6 +210,8 @@ class HomeController @Inject()(cc: ControllerComponents, silhouette: Silhouette[
         println(gamecode)
         if(playernumber == 1)
           out ! Json.obj( "code" -> gamecode).toString()
+        if(playernumber == 2)
+          game.nextturn() //set game to player 1 to start the game
     }
 
     val jsonIO = new FileIO
@@ -230,8 +234,8 @@ class HomeController @Inject()(cc: ControllerComponents, silhouette: Silhouette[
         case _: RedoErrorEvent => out ! Json.obj( "message" -> "Nothing to redo!").toString(); true
         case _: PlayerEvent =>
           out ! Json.obj("player" -> Json.obj(
-            "playername" -> getPlayerturn(),
-            "playercolor" -> getPlayercolor(),
+            "playername" -> getPlayerturn(game),
+            "playercolor" -> getPlayercolor(game),
           )).toString(); true
         case _ => false
       }
